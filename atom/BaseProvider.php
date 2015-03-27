@@ -1,7 +1,7 @@
 <?php
 namespace Atom;
 
-class BaseProvider
+class BaseProvider implements IProvider
 {
-    
+
 }
