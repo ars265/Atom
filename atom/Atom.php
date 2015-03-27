@@ -5,7 +5,10 @@ use Atom\QueryNode as QueryNode;
 
 class Atom
 {
+    
     private static $instance = null;
+    
+    
     
     
     public function __construct() {}
@@ -19,8 +22,15 @@ class Atom
         return self::$instance;
     }
     
-    public static function select() {
-        return QueryNode();
+    public static function select( $what ) {
+        
+        $head = QueryNode();
+        return $head->select( $what );
+    }
+    
+    public static function query() {
+        
+        
     }
     
     
