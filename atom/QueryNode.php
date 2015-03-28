@@ -19,6 +19,7 @@ class QueryNode
 
     private $compiled = false;
     private $partial_query = '';
+    private $compiled_query = '';
     private $raw_result = null;
 
 
@@ -59,9 +60,17 @@ class QueryNode
         }
     }
 
+    protected function ensure_compiled() {
+
+        if ( !$this->compiled ) {
+            $this->compile();
+        }
+    }
+
     //and_group - ?reserved word and_where, and_having
     protected function and_group( $condition ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = 'AND ' . trim( $condition );
@@ -72,6 +81,7 @@ class QueryNode
     //or_group - ?reserved word or_where, or_having
     protected function or_group( $condition ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = 'OR ' . trim( $condition );
@@ -85,6 +95,7 @@ class QueryNode
     //select - followed by all, distinct, perform_function, and column
     public function select( $what = null ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         if ( null === $what ) {
@@ -102,6 +113,7 @@ class QueryNode
     //all - followed by from
     public function all() {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = 'ALL';
@@ -112,6 +124,7 @@ class QueryNode
     //distinct - followed by from
     public function distinct() {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = 'DISTINCT';
@@ -123,6 +136,7 @@ class QueryNode
     //from - followed by table, where
     public function from( $where = null ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         if ( null === $where ) {
@@ -141,6 +155,7 @@ class QueryNode
     //as_alias followed by table, or on,  needs to add comma if multiple iterations
     public function as_alias( $alias ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = 'AS ' . trim( $alias );
@@ -151,6 +166,7 @@ class QueryNode
     //func - can be after select or having, followed by as_alias or from
     public function perform_function( $fn ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = trim( $fn );
@@ -161,6 +177,7 @@ class QueryNode
     //join - followed by table, as_alias, or on
     public function join( $type = 0, $where = null ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         switch ( $type ) {
@@ -206,6 +223,7 @@ class QueryNode
     //on - followed by where, or join
     public function on( $condition ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = trim( $condition );
@@ -216,6 +234,7 @@ class QueryNode
     //where - followed by and_where, or_where, begin_group, limit
     public function where( $condition = null ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         if ( null === $condition ) {
@@ -243,6 +262,7 @@ class QueryNode
     //limit - could already accept offset as param
     public function limit( $limit, $offset = null ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = 'LIMIT ';
@@ -259,6 +279,7 @@ class QueryNode
     //offset
     public function offset( $offset ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = 'OFFSET ' . intval( $offset );
@@ -269,6 +290,7 @@ class QueryNode
     //begin_group
     public function begin_group( $condition = null ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         if ( null === $condition ) {
@@ -286,6 +308,7 @@ class QueryNode
     //end_group
     public function end_group() {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = ')';
@@ -293,42 +316,10 @@ class QueryNode
         return $this->next;
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    //waiting on these
-    //group_by
-    //having - possible alias of where?
-    //order_by
-    //union
-
-    /* query operators */
-    //https://dev.mysql.com/doc/refman/5.0/en/comparison-operators.html
-    //BETWEEN ... AND ...
-
-
-    /* custom functions */
     //table - followed by as_alias, where
     public function table( $table ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = '`' . $table . '`';
@@ -339,6 +330,7 @@ class QueryNode
     //column - need to add comma if multiple columns in a row
     public function column( $column ) {
 
+        $this->ensure_not_compiled();
         $this->add_next();
 
         $partial_query = '`' . $column . '`';
@@ -349,20 +341,30 @@ class QueryNode
     //compile - turns it into a string
     public function compile() {
 
-        if ( $this->compiled ) {
-            return $this;
+        //if we've already compiled the string, no sense in doing it again
+        if ( !$this->compiled ) {
+
+            $current = $this->head->next;
+            $query = $this->head->partial_query;
+
+            //build query
+            while ( null !== $current ) {
+                $query .= ' ' . $current->partial_query;
+            }
+
+            $this->compiled_query = $query;
+
+            //lock the query, no longer modifiable
+            $this->compiled = true;
         }
 
-        if ( $this !== $this->head ) {
-            $this->head->compile();
-        }
-
-        //trim each piece and join using space
         return $this;
     }
 
     //first - returns the first element, this does not change the query
     public function first() {
+
+        $this->ensure_compiled();
 
 
     }
@@ -370,11 +372,15 @@ class QueryNode
     //next - returns the results until no more rows are avilable in the result set
     public function next() {
 
+        $this->ensure_compiled();
+
 
     }
 
     //all - returns all of the records as an array of rows
     public function all() {
+
+        $this->ensure_compiled();
 
 
     }
@@ -382,8 +388,33 @@ class QueryNode
     //scalar - returns a scalar value such as the value returned from the SQL function COUNT.
     public function scalar() {
 
+        $this->ensure_compiled();
+
 
     }
+
+    /**
+     * Returns the compiled query string.
+     *
+     * @access public
+     * @return String
+     */
+    public function get_query() {
+
+        $this->ensure_compiled();
+
+        return $this->compiled_query;
+    }
+
+    //waiting on these
+    //group_by
+    //having - possible alias of where?
+    //order_by
+    //union
+
+    /* query operators */
+    //https://dev.mysql.com/doc/refman/5.0/en/comparison-operators.html
+    //BETWEEN ... AND ...
 
     /*
      *
