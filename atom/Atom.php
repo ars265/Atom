@@ -1,122 +1,153 @@
 <?php
-namespace Atom;
 
+namespace sn\atom;
 
-//yes I'm using a singleton, and yes, I know it's bad for my health :)
-class Atom
-{
+/**
+ * A class for building query strings.
+ */
+class Atom {
 
     /**
-     * The instance of the singleton.
+     * The leading node of the query
      *
      * (default value: null)
      *
-     * @var Atom|null
-     * @access private
-     * @static
+     * @var null|atom\Symbol
+     * @access protected
      */
-    private static $instance = null;
+    protected $head = null;
 
     /**
-     * The provider instance used to perform functionality in different
-     *  environments such as using MySQL PDO, WordPress, Yii, etc. This
-     *  property must be set prior to use of most functions.
+     * The ending node of the query.
      *
      * (default value: null)
      *
-     * @var IProvider|null
+     * @var null|atom\Symbol
      * @access protected
-     * @static
      */
-    protected static $provider = null;
-
-
-    //Keep the constructor private to not allow instances to be created.
-    private function __construct() {}
+    protected $tail = null;
 
     /**
-     * Returns the instance of the singleton.
+     * The builder instance to use to build the statement
      *
-     * @access protected
-     * @static
-     * @return Atom The class instance
-     */
-    protected static function get_instance() {
-
-        if ( null === self::$instance ) {
-            self::$instance = new self();
-        }
-
-        return self::$instance;
-    }
-
-    /**
-     * Ensures that the provider was set before using relying on it to perform
-     *  functionality. This method will throw an exception if the provider has
-     *  not been set.
+     * (default value: null)
      *
+     * @var mixed
      * @access protected
-     * @static
-     * @return void
      */
-    protected static function ensure_provider() {
-
-        if ( null === self::$provider ) {
-            throw new Exception( 'A Provider must be set before using Atom.' );
-        }
-    }
+    protected $builder = null;
 
     /**
-     * Sets the provider instance that will be used to perform functionality
-     *  across PHP platforms.
+     * The constructor for the Atom instance.
      *
      * @access public
-     * @param IProvider $provider
+     * @param \sn\atom\I_Builder $builder (default: null)
      * @return void
      */
-    public function set_provider( $provider ) {
+    public function __construct( $builder = null ) {
 
-        if ( !$provider instanceof IProvider ) {
-            throw new Error( 'Provider must implement IProvider interface.' );
+        //if this is a string class create an instance
+        if ( is_string( $builder ) && class_exists( $builder ) ) {
+            $builder = new $builder();
         }
 
-        self::$provider = $provider;
+        //if the builder is an instance of the builder interface set it. This
+        // will not set the grammer and now it will still need set. This is the
+        // reason the Atom class has the set grammar, for convenience.
+        if ( $builder instanceof \sn\atom\I_Builder ) {
+            $this->builder = $builder;
+        }
     }
 
     /**
-     * A basic generator for QueryNodes. This starts the query syntax and allows
-     *  the query to be built hereafter using the query building nodes.
+     * A magic function that constructs the next grammer defined element as part
+     *  of the query.
      *
      * @access public
-     * @static
-     * @param String|null $what (default: null)
-     * @return QueryNode
+     * @param string $subject
+     * @param array $context
+     * @return \sn\atom\Atom
      */
-    public static function select( $what = null ) {
+    public function __call( $subject, $context ) {
 
-        self::ensure_provider();
+        $new_instance = ( null === $this->head );
+        $tail = null;
 
-        //create a new start node with the configured provider
-        $head = new QueryNode( null, null, self::$provider );
+        if ( !$new_instance ) {
+            $tail = $this->tail;
+        }
 
-        return $head->select( $what );
+        //create the new Symbol instance
+        $node = new \sn\atom\Symbol( $subject, $context, null );
+
+        $grammar = $this->builder->get_grammar();
+
+        //find out if this is valid via the grammar
+        $valid = $grammar->validate_symbols( $tail, $node );
+
+        if ( !$valid ) {
+            //throw exception
+        }
+
+        if ( $new_instance ) {
+
+            $this->head = $node;
+            $this->tail = $node;
+
+        } else {
+
+            //make the new Symbol the new tail
+            $tail->set_lookahead( $node );
+            $this->tail = $node;
+        }
+
+        //in order to make each method chainable we must always return $this
+        return $this;
     }
 
-    public static function query() {
-
-        self::ensure_provider();
-
+    /**
+     * Compiles the query and returns an I_Statement object
+     *
+     * @access public
+     * @return \sn\atom\I_Statement
+     */
+    public function compile() {
+        return $this->builder->generate_statement( $this->head );
     }
 
-    public static qoute() {
-
-        self::ensure_provider();
-
+    /**
+     * Returns the builder used for this Atom instance.
+     *
+     * @access public
+     * @return null|\sn\atom\I_Builder
+     */
+    public function get_builder() {
+        return $this->builder;
     }
 
-    public static escape() {
+    /**
+     * Sets the builder instance used by the Atom instance.
+     *
+     * @access public
+     * @param \sn\atom\I_Builder $builder
+     * @return void
+     */
+    public function set_builder( \sn\atom\I_Builder $builder ) {
+        $this->builder = $builder;
+    }
 
-        self::ensure_provider();
+    /**
+     * A convenience method to set the grammar when setting the builder instance
+     *  as a string during construction instead of a configured instance.
+     *
+     * @access public
+     * @param \sn\atom\I_Grammar $grammar
+     * @return void
+     */
+    public function set_grammar( \sn\atom\I_Grammar $grammar ) {
 
+        if ( null !== $this->builder ) {
+            $this->builder->set_grammer( $grammar );
+        }
     }
 }
